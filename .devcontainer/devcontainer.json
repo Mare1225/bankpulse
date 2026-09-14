@@ -1,6 +1,5 @@
 {
-  "name": "BankPulse Platform Engineering Lab",
-  "image": "mcr.microsoft.com/devcontainers/java:1-21-bookworm",
+  "name": "BANKdragon V2.1 Interactive Platform Lab",
   "features": {
     "ghcr.io/devcontainers/features/docker-in-docker:2": {
       "version": "latest",
@@ -13,10 +12,15 @@
     "memory": "8gb",
     "storage": "32gb"
   },
-  "forwardPorts": [8080],
+  "forwardPorts": [
+    8080,
+    3000,
+    9090,
+    8088
+  ],
   "portsAttributes": {
     "8080": {
-      "label": "BankPulse Operations Console",
+      "label": "BankPulse Interactive Banking",
       "onAutoForward": "openBrowser",
       "protocol": "http"
     },
@@ -27,6 +31,21 @@
     "27017": {
       "label": "MongoDB (internal lab)",
       "onAutoForward": "silent"
+    },
+    "3000": {
+      "label": "Grafana",
+      "onAutoForward": "silent",
+      "protocol": "http"
+    },
+    "9090": {
+      "label": "Prometheus",
+      "onAutoForward": "silent",
+      "protocol": "http"
+    },
+    "8088": {
+      "label": "cAdvisor",
+      "onAutoForward": "silent",
+      "protocol": "http"
     }
   },
   "postCreateCommand": "bash .devcontainer/setup.sh",
@@ -47,5 +66,8 @@
         }
       }
     }
+  },
+  "build": {
+    "dockerfile": "Dockerfile"
   }
 }
