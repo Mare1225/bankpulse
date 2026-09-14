@@ -1,58 +1,145 @@
-# BankPulse Platform Engineering Lab
+# BANKdragon / BankPulse V2.1 — Interactive Banking Experience
 
-Laboratorio hiperrealista de microservicios para practicar persistencia políglota, contenedores, resiliencia y entrega continua. No es una simulación: el panel consume dos APIs Spring Boot, los pagos se guardan en MariaDB y los eventos de auditoría en MongoDB.
+> **V2.1:** además de la plataforma de microservicios, el puerto `8080` ofrece una experiencia bancaria interactiva con modos Cliente/Arquitecto, gastronomía, viajes offline, seat holds, Social Split y visualización de arquitectura. Todo consume APIs reales del laboratorio.
 
-## Arquitectura
+Plataforma docente de microservicios desplegables para Arquitectura de Software, DDD, DevOps, CI y Observabilidad. Esta version conserva el core financiero de BankPulse y transforma las cuatro epicas de negocio en servicios independientes con contratos, ownership de datos, health checks y metricas.
 
-- **payments-api (Java 21 + Spring Boot):** pagos, idempotencia y Transactional Outbox sobre MariaDB.
-- **audit-api (Java 21 + Spring Boot):** recepción idempotente y consulta de eventos sobre MongoDB.
-- **console (Nginx + HTML/JS):** consola de operaciones, evidencia técnica y progreso de misiones.
-- **Docker Compose:** red privada, volúmenes, health checks y dependencias saludables.
-- **GitHub Actions:** construcción, smoke test y publicación opcional en Docker Hub.
+## Arquitectura V2
 
-## Inicio rápido
+| Servicio | Epica / contexto | Puerto interno | Persistencia |
+|---|---|---:|---|
+| `payments-api` | Core financiero | 8081 | MariaDB |
+| `audit-api` | Auditoria | 8082 | MongoDB `audit` |
+| `experiences-api` | Gastronomia | 8083 | MongoDB `experiences` |
+| `travel-benefits-api` | Viajes | 8084 | MongoDB `travel` |
+| `events-api` | Eventos premium | 8085 | PostgreSQL `events` + Redis TTL |
+| `social-split-api` | Social Split | 8086 | PostgreSQL `social_split` |
+| `console` | Edge + UI | 8080 host | Nginx |
 
-Requisitos: Docker Desktop o Docker Engine con Compose v2 y Git.
+Los puertos 8081-8086 permanecen dentro de la red Docker. El navegador entra por `console:8080`, que funciona como edge/reverse proxy de laboratorio.
+
+
+## Frontend interactivo V2.1
+
+La UI del puerto `8080` ahora permite recorrer las cuatro épicas desde una experiencia bancaria:
+
+- **Experiencias:** consulta MongoDB a través de `experiences-api` y genera una garantía demo en `payments-api`.
+- **Viajes:** consulta elegibilidad, emite credencial firmada y permite demostrar disponibilidad offline local.
+- **Eventos:** renderiza un mapa de asientos y crea HOLDs reales en Redis con TTL; un segundo intento obtiene HTTP 409.
+- **Social Split:** crea sesiones/participantes reales, usa referencias de pagos y aplica la invariante de cierre.
+- **Platform:** muestra health de seis servicios, C4 simplificado, ownership y enlaces a la observabilidad real.
+
+Use el selector **Cliente / Arquitecto** para alternar entre experiencia de usuario y explicaciones técnicas.
+
+## Data ownership
+
+La V2 aplica **single-writer ownership**. Compartir un motor fisico en Codespaces no significa compartir modelo de datos:
+
+- `payments-api` es la unica autoridad financiera.
+- `events-api` posee eventos y holds; Redis solo contiene estado temporal.
+- `social-split-api` almacena referencias de pago, no transacciones financieras.
+- `experiences-api` y `travel-benefits-api` usan bases Mongo separadas.
+- `audit-api` es una proyeccion de auditoria y no modifica dominios de origen.
+
+Consulte `docs/architecture/DATA-OWNERSHIP.md` y use `docs/adr/ADR-TEMPLATE-DATA-OWNERSHIP.md` como entregable de equipo.
+
+## Inicio rapido en GitHub Codespaces
+
+El Dev Container incluye el fix de Yarn requerido por Docker-in-Docker:
+
+```dockerfile
+FROM mcr.microsoft.com/devcontainers/java:1-21-bookworm
+RUN rm -f /etc/apt/sources.list.d/yarn.list
+```
+
+1. Abra **Code -> Codespaces -> Create codespace on main**.
+2. Espere el build inicial de los servicios.
+3. Verifique:
 
 ```bash
-cp .env.example .env
-docker compose up --build -d
+docker --version
+docker compose version
 docker compose ps
 ```
 
-Abra <http://localhost:8080>. El primer build puede tardar varios minutos porque Maven descarga dependencias dentro de los contenedores.
+4. Abra el puerto **8080** reenviado por Codespaces.
 
-## Opción completamente online: GitHub Codespaces
+No se requiere IP del Codespace.
 
-El proyecto incluye una configuración `.devcontainer` lista para Codespaces. Después de subir la carpeta a GitHub:
-
-1. Seleccione **Code → Codespaces → Create codespace on main**.
-2. Espere a que se construya y levante el stack automáticamente.
-3. Abra el puerto reenviado **BankPulse Operations Console (8080)**.
-
-No es necesario instalar Java, Maven, MongoDB, MariaDB ni Docker en el computador del estudiante. Consulte la [guía detallada de Codespaces](docs/CODESPACES.md).
-
-Para verificar todo el flujo:
+## Inicio manual
 
 ```bash
-bash scripts/smoke.sh
+cp .env.example .env
+docker compose config
+docker compose up -d --build --wait
+docker compose ps
 ```
 
-## Chaos drill reversible
+Prueba integral:
 
 ```bash
-docker compose stop mongo audit-api
-# Cree un pago desde la consola; MariaDB lo confirma y el outbox queda pendiente.
-docker compose up -d --wait mongo audit-api
-# En pocos segundos el evento se entrega una sola vez y el outbox vuelve a cero.
+bash scripts/smoke-v2.sh
 ```
 
-No use `docker compose down -v` si desea conservar los datos. Consulte [Misiones](docs/MISSIONS.md) y [Runbook](docs/RUNBOOK.md).
+## Observabilidad
 
-## GitHub y Docker Hub
+El stack se mantiene separado de la aplicacion:
 
-1. Cree un repositorio y suba esta carpeta.
-2. La acción `ci.yml` construye el stack y ejecuta el smoke test en cada push y pull request.
-3. Para publicar imágenes en Docker Hub, configure los secretos `DOCKERHUB_USERNAME` y `DOCKERHUB_TOKEN` y ejecute manualmente **Publish Docker Hub images**.
+```bash
+docker compose -f observability/compose.yaml up -d
+docker compose -f observability/compose.yaml ps
+```
 
-Nunca suba el archivo `.env`, contraseñas reales ni tokens al repositorio.
+Puertos de Codespaces:
+
+- 3000: Grafana
+- 9090: Prometheus
+- 8088: cAdvisor
+
+Grafana demo:
+
+- usuario: `admin`
+- password: `bankpulse_demo`
+
+Estas credenciales son exclusivamente docentes. Para produccion use un secret manager.
+
+Prometheus scrapea `/actuator/prometheus` de los seis microservicios. El dashboard `BANKdragon V2 Platform Overview` incluye disponibilidad, throughput HTTP, heap JVM, p95 y CPU de contenedores.
+
+## CI
+
+`.github/workflows/ci.yml` implementa dos puertas:
+
+1. **Architecture contract:** verifica la existencia de los seis servicios, ownership docs y Compose/observabilidad validos.
+2. **Integration test:** construye el stack real, ejecuta `smoke-v2.sh`, levanta Prometheus/Grafana y valida sus health endpoints.
+
+Flujo esperado:
+
+```text
+feature/* -> Pull Request -> GitHub Actions -> CI verde -> review -> squash merge -> main
+```
+
+CI no significa deployment. El workflow demuestra integrabilidad y calidad automatizada; CD puede incorporarse posteriormente con GHCR + Argo CD/Kubernetes.
+
+## Distribucion por equipos
+
+- Equipo Gastronomia -> `services/experiences-api`
+- Equipo Viajes -> `services/travel-benefits-api`
+- Equipo Eventos -> `services/events-api`
+- Equipo Social Split -> `services/social-split-api`
+
+Cada equipo debe entregar DDD, C4, ADR de Data Ownership, implementacion, tests, evidencia CI y metricas operacionales.
+
+## Recursos de Codespaces
+
+La configuracion objetivo es 4 CPU / 8 GB. La persistencia comparte motores fisicos para no multiplicar consumo, manteniendo aislamiento logico. Al terminar:
+
+```bash
+docker compose -f observability/compose.yaml down
+docker compose down
+```
+
+Luego use **Stop Codespace**.
+
+## Seguridad
+
+No suba `.env`, tokens, claves institucionales o credenciales reales. Los passwords incluidos son solamente para un entorno local efimero de aprendizaje.

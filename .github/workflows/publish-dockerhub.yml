@@ -22,6 +22,14 @@ jobs:
             context: services/payments-api
           - name: audit-api
             context: services/audit-api
+          - name: experiences-api
+            context: services/experiences-api
+          - name: travel-benefits-api
+            context: services/travel-benefits-api
+          - name: events-api
+            context: services/events-api
+          - name: social-split-api
+            context: services/social-split-api
           - name: console
             context: frontend
     steps:
