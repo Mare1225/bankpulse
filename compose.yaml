@@ -81,6 +81,7 @@ services:
 
 networks:
   bankpulse:
+    name: bankpulse-network
     driver: bridge
 
 volumes:

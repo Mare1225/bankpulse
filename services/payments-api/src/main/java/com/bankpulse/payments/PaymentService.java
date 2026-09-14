@@ -3,7 +3,6 @@ package com.bankpulse.payments;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -28,7 +27,7 @@ public class PaymentService {
     }
 
     private Payment persist(String idempotencyKey, PaymentController.PaymentRequest request) {
-        Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        Instant now = Instant.now();
         Payment payment = new Payment(UUID.randomUUID().toString(), idempotencyKey, request.account(), request.amount(), request.currency().toUpperCase(), "ACCEPTED", now);
         payments.save(payment);
 
