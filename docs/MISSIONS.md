@@ -35,18 +35,3 @@ Abra una rama, cambie el código, cree un pull request y use la acción CI como 
 | Resiliencia y recuperación | 25 |
 | Seguridad de secretos e imágenes | 15 |
 | Explicación del trade-off | 10 |
-
-## Misión 6 — Observabilidad e incidente operativo
-
-Levante el stack independiente de `observability/` y demuestre que Prometheus recibe métricas de `payments-api`, `audit-api` y cAdvisor. Abra el dashboard **BankPulse Platform Overview** en Grafana.
-
-1. Capture el estado normal con ambos APIs en `UP`.
-2. Ejecute `docker compose stop mongo audit-api` desde la raíz.
-3. Observe que Prometheus/Grafana detectan la caída de `audit-api` sin detener `payments-api`.
-4. Cree un pago y relacione el incidente con la Misión 4: el evento debe permanecer en el outbox.
-5. Recupere MongoDB y `audit-api` y observe el retorno del target a `UP`.
-6. Confirme que el evento pendiente termina publicado exactamente una vez.
-
-**Evidencia:** captura del dashboard antes, durante y después del incidente; pantalla de Targets de Prometheus; evidencia del outbox antes y después de la recuperación.
-
-**Pregunta de arquitectura:** explique por qué Grafana y Prometheus se ejecutan en un stack separado y qué riesgo existiría si la observabilidad dependiera del mismo servicio que está fallando.
