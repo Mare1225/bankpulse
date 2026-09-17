@@ -1,4 +1,6 @@
 package com.bankpulse.events;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.util.UUID;
 import java.util.ArrayList;
@@ -11,16 +13,23 @@ import org.springframework.stereotype.Service;
 @Service
 public class SeatHoldService {
   private final StringRedisTemplate redis; private final Duration ttl;
-  SeatHoldService(StringRedisTemplate redis,@Value("${bankpulse.events.hold-ttl-seconds:300}") long ttl){this.redis=redis;this.ttl=Duration.ofSeconds(ttl);}
+  private final Counter holdsCreated; private final Counter holdsConflicts; private final Counter holdsReleased;
+  SeatHoldService(StringRedisTemplate redis,@Value("${bankpulse.events.hold-ttl-seconds:300}") long ttl, MeterRegistry registry){
+    this.redis=redis;this.ttl=Duration.ofSeconds(ttl);
+    this.holdsCreated=Counter.builder("seat.holds.opened").description("Seat holds creados exitosamente").register(registry);
+    this.holdsConflicts=Counter.builder("seat.holds.conflicts").description("Intentos de hold en asiento ya ocupado (HTTP 409)").register(registry);
+    this.holdsReleased=Counter.builder("seat.holds.released").description("Seat holds liberados manualmente").register(registry);
+  }
   public Hold create(String eventId,String seatId,String memberId){
     String key="seat-hold:"+eventId+":"+seatId; String holdId=UUID.randomUUID().toString(); String value=holdId+"|"+memberId;
     Boolean ok=redis.opsForValue().setIfAbsent(key,value,ttl);
-    if(!Boolean.TRUE.equals(ok)) throw new SeatAlreadyHeldException();
+    if(!Boolean.TRUE.equals(ok)){holdsConflicts.increment();throw new SeatAlreadyHeldException();}
+    holdsCreated.increment();
     return new Hold(holdId,eventId,seatId,memberId,ttl.toSeconds());
   }
   public void release(String eventId,String seatId,String holdId){
     String key="seat-hold:"+eventId+":"+seatId; String current=redis.opsForValue().get(key);
-    if(current!=null && current.startsWith(holdId+"|")) redis.delete(key);
+    if(current!=null && current.startsWith(holdId+"|")){redis.delete(key);holdsReleased.increment();}
   }
   // Lab introspection endpoint support. KEYS is acceptable only for this small educational dataset;
   // production systems should use a bounded index/scan strategy.
