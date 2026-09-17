@@ -71,3 +71,24 @@ jobs:
       - name: Stop platform
         if: always()
         run: docker compose down -v || true
+
+  release-gate:
+    name: Release Gate — Idempotencia de pagos
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: integration-test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and start BANKdragon V2
+        run: docker compose up --build -d --wait --wait-timeout 300
+      - name: Business test — 1 key → 1 pago
+        run: bash scripts/business-test.sh
+      - name: Capture evidence on failure
+        if: failure()
+        run: |
+          echo "=== FALSO VERDE DETECTADO ==="
+          echo "La infraestructura está UP pero el negocio está en riesgo."
+          docker compose logs payments-api --tail=50 || true
+      - name: Stop platform
+        if: always()
+        run: docker compose down -v || true
