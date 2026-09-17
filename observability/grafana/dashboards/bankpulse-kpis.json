@@ -1,0 +1,225 @@
+{
+  "title": "BankPulse KPIs de Negocio",
+  "uid": "bankpulse-kpis",
+  "schemaVersion": 39,
+  "refresh": "10s",
+  "time": { "from": "now-15m", "to": "now" },
+  "timezone": "browser",
+  "tags": ["bankpulse", "kpis", "negocio"],
+  "templating": {
+    "list": [
+      {
+        "name": "DS_PROMETHEUS",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": { "text": "Prometheus", "value": "Prometheus" }
+      }
+    ]
+  },
+  "panels": [
+
+    { "id": 100, "type": "text", "title": "CORE DOMAIN — Payments & Audit", "options": { "content": "### Payments · Audit\nMétricas de consistencia eventual y salud del outbox.", "mode": "markdown" }, "gridPos": { "h": 2, "w": 24, "x": 0, "y": 0 } },
+
+    {
+      "id": 1, "type": "stat", "title": "KPI — Outbox pendiente",
+      "description": "Pagos confirmados aún no auditados. Debe ser 0 en estado normal.",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "outbox_pending", "legendFormat": "Pendientes", "refId": "A" }],
+      "fieldConfig": { "defaults": { "min": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 5 }] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 2 }
+    },
+    {
+      "id": 2, "type": "stat", "title": "KPI — Fallos del outbox (último min)",
+      "description": "Sube cuando audit-api o MongoDB no están disponibles.",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "increase(outbox_publish_failures_total[1m])", "legendFormat": "Fallos/min", "refId": "A" }],
+      "fieldConfig": { "defaults": { "min": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }, { "color": "red", "value": 1 }] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 2 }
+    },
+    {
+      "id": 3, "type": "stat", "title": "KPI — Latencia p95 de auditoría",
+      "description": "Tiempo entre creación del pago y publicación al audit-api.",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "histogram_quantile(0.95, rate(outbox_publish_latency_seconds_bucket[5m]))", "legendFormat": "p95", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "s", "min": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }, { "color": "yellow", "value": 5 }, { "color": "red", "value": 30 }] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 2 }
+    },
+    {
+      "id": 4, "type": "stat", "title": "Salud payments + audit",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "sum(up{job=~\"payments-api|audit-api\"})", "legendFormat": "APIs UP", "refId": "A" }],
+      "fieldConfig": { "defaults": { "min": 0, "max": 2, "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": 0 }, { "color": "yellow", "value": 1 }, { "color": "green", "value": 2 }] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 2 }
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "Historial outbox pendiente",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "outbox_pending", "legendFormat": "Pendientes", "refId": "A" }],
+      "fieldConfig": { "defaults": { "min": 0, "custom": { "fillOpacity": 20 }, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }, { "color": "red", "value": 1 }] } } },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 7 }
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "Latencia publicación al audit-api (p50 / p95)",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, rate(outbox_publish_latency_seconds_bucket[5m]))", "legendFormat": "p95", "refId": "A" },
+        { "expr": "histogram_quantile(0.50, rate(outbox_publish_latency_seconds_bucket[5m]))", "legendFormat": "p50", "refId": "B" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s", "min": 0 } },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 7 }
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "Pagos creados por segundo",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "rate(http_server_requests_seconds_count{job=\"payments-api\", uri=\"/api/payments\", method=\"POST\"}[1m])", "legendFormat": "Pagos/seg", "refId": "A" }],
+      "fieldConfig": { "defaults": { "min": 0 } },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 14 }
+    },
+    {
+      "id": 8, "type": "timeseries", "title": "Fallos acumulados del outbox publisher",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "rate(outbox_publish_failures_total[1m])", "legendFormat": "Fallos/seg", "refId": "A" }],
+      "fieldConfig": { "defaults": { "min": 0, "custom": { "fillOpacity": 20 } } },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 14 }
+    },
+
+    { "id": 200, "type": "text", "title": "SUPPORTING DOMAIN — Events (Seat Hold)", "options": { "content": "### Events API\nReserva de asientos con Redis TTL. El KPI clave es el ratio conflictos / intentos.", "mode": "markdown" }, "gridPos": { "h": 2, "w": 24, "x": 0, "y": 21 } },
+
+    {
+      "id": 21, "type": "stat", "title": "KPI — Holds creados",
+      "description": "Seat holds exitosos acumulados.",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "seat_holds_opened_total", "legendFormat": "Creados", "refId": "A" }],
+      "fieldConfig": { "defaults": { "min": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": 0 }] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 23 }
+    },
+    {
+      "id": 22, "type": "stat", "title": "KPI — Conflictos 409",
+      "description": "Intentos de reservar un asiento ya ocupado.",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "seat_holds_conflicts_total", "legendFormat": "Conflictos", "refId": "A" }],
+      "fieldConfig": { "defaults": { "min": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 5 }] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 23 }
+    },
+    {
+      "id": 23, "type": "stat", "title": "KPI — Holds liberados",
+      "description": "Holds liberados manualmente antes del TTL.",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "seat_holds_released_total", "legendFormat": "Liberados", "refId": "A" }],
+      "fieldConfig": { "defaults": { "min": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": 0 }] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 23 }
+    },
+    {
+      "id": 24, "type": "timeseries", "title": "Actividad de seat holds por segundo",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        { "expr": "rate(seat_holds_opened_total[1m])", "legendFormat": "Creados/seg", "refId": "A" },
+        { "expr": "rate(seat_holds_conflicts_total[1m])", "legendFormat": "Conflictos/seg", "refId": "B" },
+        { "expr": "rate(seat_holds_released_total[1m])", "legendFormat": "Liberados/seg", "refId": "C" }
+      ],
+      "fieldConfig": { "defaults": { "min": 0 } },
+      "gridPos": { "h": 7, "w": 18, "x": 0, "y": 28 }
+    },
+
+    { "id": 300, "type": "text", "title": "SUPPORTING DOMAIN — Social Split", "options": { "content": "### Social Split API\nSesiones colaborativas de gasto compartido. KPI clave: sesiones completadas vs creadas.", "mode": "markdown" }, "gridPos": { "h": 2, "w": 24, "x": 0, "y": 35 } },
+
+    {
+      "id": 31, "type": "stat", "title": "KPI — Sesiones creadas",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "split_sessions_opened_total", "legendFormat": "Creadas", "refId": "A" }],
+      "fieldConfig": { "defaults": { "min": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": 0 }] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 37 }
+    },
+    {
+      "id": 32, "type": "stat", "title": "KPI — Sesiones completadas",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "split_sessions_completed_total", "legendFormat": "Completadas", "refId": "A" }],
+      "fieldConfig": { "defaults": { "min": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 37 }
+    },
+    {
+      "id": 33, "type": "stat", "title": "KPI — Autorizaciones",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "split_participants_authorized_total", "legendFormat": "Autorizaciones", "refId": "A" }],
+      "fieldConfig": { "defaults": { "min": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 37 }
+    },
+    {
+      "id": 34, "type": "stat", "title": "KPI — Tasa de completitud",
+      "description": "% de sesiones que terminan exitosamente. < 50% indica abandono.",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "split_sessions_completed_total / split_sessions_opened_total * 100", "legendFormat": "% Completadas", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": 0 }, { "color": "yellow", "value": 50 }, { "color": "green", "value": 80 }] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 37 }
+    },
+    {
+      "id": 35, "type": "timeseries", "title": "Actividad Social Split por segundo",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        { "expr": "rate(split_sessions_opened_total[1m])", "legendFormat": "Sesiones creadas/seg", "refId": "A" },
+        { "expr": "rate(split_sessions_completed_total[1m])", "legendFormat": "Sesiones completadas/seg", "refId": "B" },
+        { "expr": "rate(split_participants_authorized_total[1m])", "legendFormat": "Autorizaciones/seg", "refId": "C" }
+      ],
+      "fieldConfig": { "defaults": { "min": 0 } },
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 42 }
+    },
+
+    { "id": 400, "type": "text", "title": "SUPPORTING DOMAIN — Experiences & Travel", "options": { "content": "### Experiences · Travel Benefits\nAdopción de beneficios premium. KPI clave: credenciales emitidas y consultas de catálogo.", "mode": "markdown" }, "gridPos": { "h": 2, "w": 24, "x": 0, "y": 49 } },
+
+    {
+      "id": 41, "type": "stat", "title": "KPI — Consultas al catálogo",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "experiences_catalog_queries_total", "legendFormat": "Consultas", "refId": "A" }],
+      "fieldConfig": { "defaults": { "min": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": 0 }] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 51 }
+    },
+    {
+      "id": 42, "type": "stat", "title": "KPI — Garantías generadas",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "experiences_guarantees_created_total", "legendFormat": "Garantías", "refId": "A" }],
+      "fieldConfig": { "defaults": { "min": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 51 }
+    },
+    {
+      "id": 43, "type": "stat", "title": "KPI — Elegibilidades consultadas",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "travel_eligibility_checks_total", "legendFormat": "Consultas", "refId": "A" }],
+      "fieldConfig": { "defaults": { "min": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": 0 }] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 51 }
+    },
+    {
+      "id": 44, "type": "stat", "title": "KPI — Credenciales emitidas",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [{ "expr": "travel_credentials_issued_total", "legendFormat": "Credenciales", "refId": "A" }],
+      "fieldConfig": { "defaults": { "min": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 51 }
+    },
+    {
+      "id": 45, "type": "timeseries", "title": "Actividad Experiences & Travel por segundo",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        { "expr": "rate(experiences_catalog_queries_total[1m])", "legendFormat": "Consultas catálogo/seg", "refId": "A" },
+        { "expr": "rate(experiences_guarantees_created_total[1m])", "legendFormat": "Garantías/seg", "refId": "B" },
+        { "expr": "rate(travel_credentials_issued_total[1m])", "legendFormat": "Credenciales/seg", "refId": "C" },
+        { "expr": "rate(travel_eligibility_checks_total[1m])", "legendFormat": "Elegibilidades/seg", "refId": "D" }
+      ],
+      "fieldConfig": { "defaults": { "min": 0 } },
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 56 }
+    }
+  ]
+}

@@ -33,6 +33,7 @@ public class OutboxPublisher {
         // KPI 2 — latencia de entrega al audit-api
         this.publishLatency = Timer.builder("outbox.publish.latency")
                 .description("Tiempo entre creación del evento y publicación exitosa")
+                .publishPercentileHistogram(true)
                 .register(registry);
         // KPI 3 — intentos fallidos acumulados
         this.failureCounter = Counter.builder("outbox.publish.failures")
