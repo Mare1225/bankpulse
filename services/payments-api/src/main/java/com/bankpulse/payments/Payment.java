@@ -12,7 +12,7 @@ import java.time.Instant;
 public class Payment {
     @Id
     private String id;
-    @Column(name = "idempotency_key", nullable = false, unique = true, length = 100)
+    @Column(name = "idempotency_key", nullable = false, length = 100)
     private String idempotencyKey;
     @Column(nullable = false, length = 80)
     private String account;
