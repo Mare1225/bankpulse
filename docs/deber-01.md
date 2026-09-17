@@ -121,11 +121,13 @@ return persist(idempotencyKey, request);  // siempre crea un pago nuevo
 
 ### Resultado del CI
 
-| Check | Resultado | Explicación |
-|---|---|---|
-| Architecture contract | ✅ PASS | Dockerfiles y docs existen |
-| Build, integration and observability | ✅ PASS | Infra UP, smoke pasa sin el check de idempotencia |
-| Release Gate — Idempotencia de pagos | ❌ BLOCKED | Pago duplicado detectado |
+| Check | Resultado | Tiempo | Explicación |
+|---|---|---|---|
+| Architecture contract | ✅ PASS | 5s | Dockerfiles y docs existen |
+| Build, integration and observability | ✅ PASS | 4m 10s | Infra UP, smoke pasa sin el check de idempotencia |
+| Release Gate — Idempotencia de pagos | ❌ BLOCKED | 4m 18s | Pago duplicado detectado |
+
+![PR #5 — falso verde bloqueado por Release Gate](../Screenshot%202026-09-16%20at%209.22.05%20PM.png)
 
 ### Evidencia del bloqueo
 
