@@ -5,7 +5,8 @@ const state = {
   view:'home', architect:false, health:{}, payments:[], audit:[], outbox:null,
   experiences:[], event:null, holds:[], currentHold:null, holdTimer:null,
   credential:JSON.parse(localStorage.getItem('bp-travel-credential')||'null'),
-  offline:false, split:null, trace:JSON.parse(localStorage.getItem('bp-trace')||'[]')
+  offline:false, split:null, trace:JSON.parse(localStorage.getItem('bp-trace')||'[]'),
+  kpiHistory:[]
 };
 const serviceMeta={
   payments:{name:'payments-api',data:'MariaDB',route:'/api/payments'},
@@ -19,7 +20,7 @@ function toast(msg){const el=$('#toast');el.textContent=msg;el.classList.add('sh
 function trace(action,path,status='OK',detail=''){state.trace.unshift({time:new Date().toLocaleTimeString('es-EC',{hour12:false}),action,path,status,detail});state.trace=state.trace.slice(0,30);localStorage.setItem('bp-trace',JSON.stringify(state.trace));renderTrace()}
 function renderTrace(){const el=$('#traceLog');if(!state.trace.length){el.innerHTML='<div class="empty-state">Interactúa con la aplicación para generar evidencia.</div>';return}el.innerHTML=state.trace.map(t=>`<div class="trace-entry"><time>${t.time}</time><div><strong>${escapeHtml(t.action)}</strong><small>${escapeHtml(t.path)}${t.detail?' · '+escapeHtml(t.detail):''}</small></div><b>${escapeHtml(t.status)}</b></div>`).join('')}
 async function request(url,options={}){if(state.offline && url.startsWith('/api/travel')) throw new Error('OFFLINE');const start=performance.now();const r=await fetch(url,options);const ms=Math.round(performance.now()-start);if(!r.ok){const text=await r.text();throw Object.assign(new Error(text||`${r.status}`),{status:r.status,ms})}const ct=r.headers.get('content-type')||'';const data=ct.includes('json')?await r.json():await r.text();return {data,ms,status:r.status}}
-function goto(view){state.view=view;$$('.view').forEach(x=>x.classList.toggle('active',x.id===`view-${view}`));$$('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.view===view));$('#viewTitle').textContent={home:'Inicio',experiences:'Experiencias',travel:'Viajes',events:'Eventos',split:'Social Split',platform:'Platform'}[view]||view;if(view==='experiences')loadExperiences();if(view==='events')loadEvents();if(view==='platform'){refreshHealth();renderTrace()}window.scrollTo({top:0,behavior:'smooth'})}
+function goto(view){state.view=view;$$('.view').forEach(x=>x.classList.toggle('active',x.id===`view-${view}`));$$('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.view===view));$('#viewTitle').textContent={home:'Inicio',experiences:'Experiencias',travel:'Viajes',events:'Eventos',split:'Social Split',platform:'Platform'}[view]||view;if(view==='experiences')loadExperiences();if(view==='events')loadEvents();if(view==='platform'){refreshHealth();renderTrace();renderKPIs()}window.scrollTo({top:0,behavior:'smooth'})}
 $$('[data-view]').forEach(b=>b.addEventListener('click',()=>goto(b.dataset.view)));$$('[data-goto]').forEach(b=>b.addEventListener('click',()=>goto(b.dataset.goto)));
 $('#clientMode').addEventListener('click',()=>setArchitect(false));$('#architectMode').addEventListener('click',()=>setArchitect(true));
 function setArchitect(on){state.architect=on;document.body.classList.toggle('architect-mode',on);$('#clientMode').classList.toggle('active',!on);$('#architectMode').classList.toggle('active',on);toast(on?'Modo Arquitecto activado':'Modo Cliente activado')}
@@ -45,8 +46,74 @@ $('#createSplit').addEventListener('click',async()=>{const total=Number($('#spli
 function renderSplit(){if(!state.split)return;$('#splitSessionTitle').textContent=`Sesión ${String(state.split.id).slice(0,8)}`;$('#splitStatus').textContent=state.split.status;const ps=state.split.participants||[];const authorized=ps.filter(p=>p.authorized).length;const paid=ps.filter(p=>p.authorized).reduce((s,p)=>s+Number(p.shareAmount),0);$('#splitProgressBar').style.width=`${ps.length?authorized/ps.length*100:0}%`;$('#splitProgressText').textContent=`$${paid.toFixed(2)} / $${Number(state.split.totalAmount).toFixed(2)}`;$('#splitParticipants').innerHTML=ps.map(p=>`<div class="participant"><div><strong>${escapeHtml(p.memberId)}</strong><small>${p.authorized?'Autorizado · '+escapeHtml(p.paymentReference||''):'Esperando autorización'}</small></div><span class="amount">$${Number(p.shareAmount).toFixed(2)}</span><button class="${p.authorized?'authorized':''}" data-authorize="${p.id}" ${p.authorized?'disabled':''}>${p.authorized?'✓ Pagado':'Autorizar'}</button></div>`).join('');$$('[data-authorize]').forEach(b=>b.addEventListener('click',()=>authorizeParticipant(b.dataset.authorize)));$('#closeSplit').disabled=!(ps.length&&ps.every(p=>p.authorized)&&state.split.status!=='COMPLETED')}
 async function authorizeParticipant(participantId){const p=state.split.participants.find(x=>x.id===participantId);try{const payment=await createPayment(p.shareAmount,`SPLIT-${String(state.split.id).slice(0,8)}`);const r=await request(`/api/splits/${state.split.id}/participants/${participantId}/authorize`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paymentReference:payment.id||`PAY-${crypto.randomUUID()}`})});state.split=r.data;trace('Participant authorized','payments-api reference → social-split-api','200',p.memberId);renderSplit()}catch(e){toast('Autorización falló')}}
 $('#closeSplit').addEventListener('click',async()=>{try{const r=await request(`/api/splits/${state.split.id}/close`,{method:'POST'});state.split=r.data;trace('Split completed','social-split-api invariant: all authorized','200');renderSplit();toast('Cuenta colaborativa completada')}catch(e){toast('La sesión todavía no puede cerrarse')}})
+const KPI_CONFIG=[
+  {key:'availability',label:'Disponibilidad de canales críticos',desc:'Banca en línea, app, cajeros y core bancario',unit:'%',target:99.9,op:'≥',higherBetter:true,dec:2},
+  {key:'failRate',label:'Transacciones fallidas por indisponibilidad',desc:'Sobre el total de transacciones',unit:'%',target:0.30,op:'≤',higherBetter:false,dec:2},
+  {key:'slaRate',label:'Cumplimiento de SLA críticos',desc:'Servicios acordados con el negocio',unit:'%',target:95.0,op:'≥',higherBetter:true,dec:1},
+  {key:'resolutionH',label:'Resolución de incidentes mayores',desc:'Tiempo medio hasta restablecer',unit:'h',target:4.0,op:'≤',higherBetter:false,dec:1}
+];
+function computeKPIs(){
+  const keys=Object.keys(serviceMeta);
+  const upCount=keys.filter(k=>state.health[k]).length;
+  const total=keys.length;
+  const availability=total?(upCount/total)*100:100;
+  const totalPay=state.payments.length;
+  const FAIL_STATUSES=['FAILED','ERROR','REJECTED','CANCELLED'];
+  const failedPay=state.payments.filter(p=>FAIL_STATUSES.includes(p.status)).length;
+  const failRate=totalPay?(failedPay/totalPay)*100:0;
+  const pending=state.outbox?.pending??0;
+  const healthScore=total?(upCount/total)*100:100;
+  const outboxScore=pending===0?100:Math.max(0,100-pending*8);
+  const slaRate=+(healthScore*0.65+outboxScore*0.35).toFixed(1);
+  const resolutionH=pending===0?0:+(1.5+pending*0.5).toFixed(1);
+  return{availability,failRate,slaRate,resolutionH};
+}
+function pushKpiSnapshot(){
+  const snap={...computeKPIs(),ts:Date.now()};
+  state.kpiHistory.push(snap);
+  if(state.kpiHistory.length>24)state.kpiHistory.shift();
+}
+function kpiSparklineSvg(series,target,W,H,higherBetter){
+  if(series.length<2)return`<div class="sparkline-empty">Acumulando telemetría…</div>`;
+  const all=[...series,target];
+  const lo=Math.min(...all),hi=Math.max(...all);
+  const span=hi-lo||1;
+  const toY=v=>higherBetter?H*0.85-((v-lo)/span)*H*0.7:H*0.15+((v-lo)/span)*H*0.7;
+  const step=W/(series.length-1);
+  const pts=series.map((v,i)=>`${(i*step).toFixed(1)},${toY(v).toFixed(1)}`).join(' ');
+  const my=toY(target).toFixed(1);
+  const lastY=toY(series[series.length-1]).toFixed(1);
+  const lastV=series[series.length-1];
+  const ok=higherBetter?lastV>=target:lastV<=target;
+  const col=ok?'#168a55':'#1666d9';
+  return`<svg class="sparkline" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true"><line x1="0" y1="${my}" x2="${W}" y2="${my}" stroke="#dde1e8" stroke-width="1.5" stroke-dasharray="5 4"/><polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${W}" cy="${lastY}" r="4" fill="${col}"/></svg>`;
+}
+function renderKPIs(){
+  const grid=$('#kpiGrid');
+  if(!grid)return;
+  const kpi=computeKPIs();
+  const hist=state.kpiHistory;
+  const W=220,H=56;
+  grid.innerHTML=KPI_CONFIG.map(c=>{
+    const val=kpi[c.key];
+    const inMeta=c.higherBetter?val>=c.target:val<=c.target;
+    const near=!inMeta&&(c.higherBetter?val>=c.target*0.97:val<=c.target*1.1);
+    const badge=inMeta?{lbl:'En meta',cls:'good'}:near?{lbl:'Cerca de la meta',cls:'amber'}:{lbl:'Fuera de meta',cls:'bad'};
+    let delta;
+    if(hist.length>=2){
+      const diff=val-hist[0][c.key];
+      const sign=diff>=0?'+':'';
+      const good=c.higherBetter?diff>=0:diff<=0;
+      delta=`<span class="kpi-delta ${good?'positive':'negative'}">${sign}${diff.toFixed(c.dec)} desde inicio</span>`;
+    }else{
+      delta=`<span class="kpi-delta neutral">Acumulando datos…</span>`;
+    }
+    const svg=kpiSparklineSvg(hist.map(h=>h[c.key]),c.target,W,H,c.higherBetter);
+    return`<article class="kpi-card"><div class="kpi-header"><span class="kpi-title">${escapeHtml(c.label)}</span><span class="kpi-badge ${badge.cls}">${badge.lbl}</span></div><p class="kpi-desc">${escapeHtml(c.desc)}</p><strong class="kpi-value">${val.toFixed(c.dec)}<span class="kpi-unit">${c.unit}</span></strong><div class="kpi-meta-row">${delta}<span class="kpi-target">Meta ${c.op} ${c.target.toFixed(1)} ${c.unit}</span></div>${svg}</article>`;
+  }).join('');
+}
 function portUrl(port){const {protocol,hostname}=location;if(hostname.endsWith('.app.github.dev'))return `${protocol}//${hostname.replace(/-\d+\.app\.github\.dev$/,`-${port}.app.github.dev`)}`;return `${protocol}//${hostname}:${port}`}
 $$('[data-port]').forEach(b=>b.addEventListener('click',()=>window.open(portUrl(b.dataset.port),'_blank','noopener')));$$('[data-copy]').forEach(b=>b.addEventListener('click',async()=>{await navigator.clipboard.writeText(b.dataset.copy);toast('Comando copiado')}));
 $('#clearTrace').addEventListener('click',()=>{state.trace=[];localStorage.removeItem('bp-trace');renderTrace()});$('#refreshAll').addEventListener('click',()=>bootstrap(true));
-async function bootstrap(showToast=false){await Promise.all([refreshHealth(),refreshCore()]);showCredential(state.credential);renderTrace();if(showToast)toast('Datos actualizados')}
-bootstrap();setInterval(()=>{refreshHealth();refreshCore()},15000);
+async function bootstrap(showToast=false){await Promise.all([refreshHealth(),refreshCore()]);pushKpiSnapshot();renderKPIs();showCredential(state.credential);renderTrace();if(showToast)toast('Datos actualizados')}
+bootstrap();setInterval(async()=>{await Promise.all([refreshHealth(),refreshCore()]);pushKpiSnapshot();renderKPIs()},15000);
