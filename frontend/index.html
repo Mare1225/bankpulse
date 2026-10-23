@@ -143,6 +143,13 @@
       <section class="view" id="view-platform">
         <div class="page-head"><div><span class="kicker">PLATFORM ENGINEERING MODE</span><h1>Arquitectura observable</h1><p>Relaciona la experiencia del usuario con servicios, datos, CI y telemetría.</p></div><div class="platform-links"><button data-port="3000">Grafana ↗</button><button data-port="9090">Prometheus ↗</button><button data-port="8088">cAdvisor ↗</button></div></div>
         <div id="platformHealthGrid" class="platform-health-grid"></div>
+        <div class="kpi-section">
+          <div class="kpi-section-head">
+            <h2>Continuidad del servicio al cliente</h2>
+            <p>¿Los clientes pueden operar con nosotros?</p>
+          </div>
+          <div class="kpi-grid" id="kpiGrid"></div>
+        </div>
         <div class="content-grid half">
           <article class="card architecture-map-card"><div class="card-head"><div><span class="kicker">C4 · CONTAINER VIEW</span><h2>Flujo de plataforma</h2></div><span class="tiny-badge">LIVE HEALTH</span></div>
             <div class="architecture-map">
